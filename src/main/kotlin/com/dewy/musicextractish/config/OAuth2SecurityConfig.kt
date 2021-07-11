@@ -2,6 +2,7 @@ package com.dewy.musicextractish.config
 
 import org.springframework.context.annotation.Bean
 import org.springframework.http.HttpStatus
+import org.springframework.http.codec.ClientCodecConfigurer
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter
@@ -12,6 +13,7 @@ import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizedCli
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository
 import org.springframework.security.oauth2.client.web.reactive.function.client.ServletOAuth2AuthorizedClientExchangeFilterFunction
 import org.springframework.security.web.authentication.HttpStatusEntryPoint
+import org.springframework.web.reactive.function.client.ExchangeStrategies
 import org.springframework.web.reactive.function.client.WebClient
 
 
@@ -22,6 +24,14 @@ class OAuth2SecurityConfig : WebSecurityConfigurerAdapter() {
         val oauth2Client = ServletOAuth2AuthorizedClientExchangeFilterFunction(authorizedClientManager)
         return WebClient.builder()
             .apply(oauth2Client.oauth2Configuration())
+            .exchangeStrategies(ExchangeStrategies.builder()
+                .codecs { configurer: ClientCodecConfigurer ->
+                    configurer
+                        .defaultCodecs()
+                        .maxInMemorySize(16 * 1024 * 1024)
+                }
+                .build()
+            )
             .build()
     }
 
