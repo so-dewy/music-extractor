@@ -1,5 +1,9 @@
 package com.dewy.musicextractish.spotify
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import org.springframework.core.io.InputStreamResource
+import org.springframework.http.HttpHeaders
+import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient
 import org.springframework.security.oauth2.client.annotation.RegisteredOAuth2AuthorizedClient
@@ -7,14 +11,17 @@ import org.springframework.security.oauth2.client.web.reactive.function.client.S
 import org.springframework.security.web.DefaultRedirectStrategy
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.reactive.function.client.WebClient
+import java.io.ByteArrayInputStream
 import javax.servlet.http.HttpServletRequest
 import javax.servlet.http.HttpServletResponse
 
 @RestController
 class SpotifyController(val webClient: WebClient) {
     @GetMapping("/login/oauth2/code/spotify")
-    fun redirect(request: HttpServletRequest,
-                 response: HttpServletResponse) {
+    fun redirect(
+        request: HttpServletRequest,
+        response: HttpServletResponse
+    ) {
 
         DefaultRedirectStrategy().sendRedirect(request, response, "http://localhost:3000")
     }
@@ -31,7 +38,8 @@ class SpotifyController(val webClient: WebClient) {
         }
 
         if (ids == null || ids.isEmpty()) {
-            return ResponseEntity.badRequest().body("playlistIds is null or empty but should be populated when selectAll is not set")
+            return ResponseEntity.badRequest()
+                .body("playlistIds is null or empty but should be populated when selectAll is not set")
         }
         val playlists = mutableListOf<Any>()
         ids.forEach {
@@ -46,10 +54,15 @@ class SpotifyController(val webClient: WebClient) {
             if (playlist != null) {
                 playlists.add(playlist)
             }
-
         }
-
-        return playlists
+        val byteArray = ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsBytes(playlists)
+        return ResponseEntity
+            .ok()
+            .contentLength(byteArray.size.toLong())
+            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=playlists.json")
+            .header(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, "Content-Disposition")
+            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+            .body(InputStreamResource(ByteArrayInputStream(byteArray)))
     }
 
     @CrossOrigin("http://localhost:3000", allowCredentials = "true")
