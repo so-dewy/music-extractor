@@ -2,6 +2,7 @@ package com.dewy.musicextractish.spotify
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.dataformat.csv.CsvMapper
 import org.springframework.core.io.InputStreamResource
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient
@@ -40,15 +41,38 @@ class SpotifyService(val webClient: WebClient) {
     fun exportAllPlaylists(
         authorizedClient: OAuth2AuthorizedClient,
         exportType: ExportType
-    ): PlaylistExportResult {
-        TODO("Collect all playlists ids and get request info for all of them")
+    ): List<PlaylistExportResult> {
+        val ids = mutableListOf<String>()
+        var playlists: JsonNode?
+        var next: String? = "${SPOTIFY_API_BASE_URL}/me/playlists"
+
+        while (next != null) {
+            playlists = webClient
+                .get()
+                .uri(next)
+                .attributes(ServletOAuth2AuthorizedClientExchangeFilterFunction.oauth2AuthorizedClient(authorizedClient))
+                .retrieve()
+                .bodyToMono(JsonNode::class.java)
+                .block()
+
+            (playlists?.get("items") as? ArrayNode)?.forEach {
+                val id = it.get("id")
+                if (id != null) {
+                    ids.add(id.textValue())
+                }
+            }
+
+            next = playlists?.get("next")?.textValue()
+        }
+
+        return exportPlaylists(authorizedClient, exportType, ids)
     }
 
     fun exportPlaylists(
         authorizedClient: OAuth2AuthorizedClient,
         exportType: ExportType,
         playlistIds: List<String>
-    ): PlaylistExportResult {
+    ): List<PlaylistExportResult> {
         val playlists = mutableListOf<Playlist>()
 
         playlistIds.forEach {
@@ -73,20 +97,26 @@ class SpotifyService(val webClient: WebClient) {
             .retrieve()
             .bodyToMono(Playlist::class.java)
             .block()
-        if (playlist?.tracks?.next != null) {
-            val next = webClient
+
+        var nextUri = playlist?.tracks?.next
+        while (nextUri != null) {
+            val nextTracks = webClient
                 .get()
-                .uri(playlist.tracks.next)
+                .uri(nextUri)
                 .attributes(ServletOAuth2AuthorizedClientExchangeFilterFunction.oauth2AuthorizedClient(authorizedClient))
                 .retrieve()
-                .bodyToMono(JsonNode::class.java)
+                .bodyToMono(Tracks::class.java)
                 .block()
-            println(next)
+
+            if (nextTracks?.items != null) {
+                playlist?.tracks?.items?.addAll(nextTracks.items)
+            }
+            nextUri = nextTracks?.next
         }
         return playlist
     }
 
-    private fun convertToExportType(playlists: List<Playlist>, exportType: ExportType): PlaylistExportResult {
+    private fun convertToExportType(playlists: List<Playlist>, exportType: ExportType): List<PlaylistExportResult> {
         return when (exportType) {
             ExportType.JSON -> convertToJson(playlists)
             ExportType.CSV -> convertToCsv(playlists)
@@ -95,51 +125,75 @@ class SpotifyService(val webClient: WebClient) {
         }
     }
 
-    private fun convertToJson(playlists: List<Playlist>): PlaylistExportResult {
-        val byteArray = ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsBytes(playlists)
-        return PlaylistExportResult(
-            inputStreamResource = InputStreamResource(ByteArrayInputStream(byteArray)),
-            contentLength = byteArray.size.toLong()
-        )
+    private fun convertToJson(playlists: List<Playlist>): List<PlaylistExportResult> {
+        val results = mutableListOf<PlaylistExportResult>()
+
+        playlists.forEach {
+            val tracks = prepareTracks(it)
+
+            val byteArray = ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsBytes(tracks)
+
+            results.add(
+                PlaylistExportResult(
+                    playlistName = it.name,
+                    inputStreamResource = InputStreamResource(ByteArrayInputStream(byteArray)),
+                    contentLength = byteArray.size.toLong()
+                )
+            )
+        }
+
+        return results
     }
 
-    private fun convertToXlsx(playlists: List<Playlist>): PlaylistExportResult {
+    private fun convertToXlsx(playlists: List<Playlist>): List<PlaylistExportResult> {
         TODO("Not yet implemented")
     }
 
-    private fun convertToXls(playlists: List<Playlist>): PlaylistExportResult {
+    private fun convertToXls(playlists: List<Playlist>): List<PlaylistExportResult> {
         TODO("Not yet implemented")
     }
 
-    private fun convertToCsv(playlists: List<Playlist>): PlaylistExportResult {
-        val tracks = prepareTracks(playlists.first())
+    private fun convertToCsv(playlists: List<Playlist>): List<PlaylistExportResult> {
+        val results = mutableListOf<PlaylistExportResult>()
 
-        val byteArrayOutputStream = ByteArrayOutputStream()
+        playlists.forEach {
+            val tracks = prepareTracks(it)
 
-        val mapper = CsvMapper()
-        val schema = mapper.schemaFor(TrackFlattened::class.java).withHeader()
-        mapper.writer(schema).writeValue(byteArrayOutputStream, tracks)
+            val byteArrayOutputStream = ByteArrayOutputStream()
 
-        val byteArray = byteArrayOutputStream.toByteArray()
+            val mapper = CsvMapper()
+            val schema = mapper.schemaFor(TrackFlattened::class.java).withHeader()
+            mapper.writer(schema).writeValue(byteArrayOutputStream, tracks)
 
-        return PlaylistExportResult(
-            inputStreamResource = InputStreamResource(ByteArrayInputStream(byteArray)),
-            contentLength = byteArray.size.toLong()
-        )
+            val byteArray = byteArrayOutputStream.toByteArray()
+
+            results.add(
+                PlaylistExportResult(
+                    playlistName = it.name,
+                    inputStreamResource = InputStreamResource(ByteArrayInputStream(byteArray)),
+                    contentLength = byteArray.size.toLong()
+                )
+            )
+        }
+
+        return results
     }
 
     private fun prepareTracks(playlist: Playlist): List<TrackFlattened> {
         val tracks = mutableListOf<TrackFlattened>()
 
-        playlist.tracks.items.forEach {
+        playlist.tracks?.items?.forEach {
             tracks.add(
                 TrackFlattened(
                     added_at = it.added_at,
-                    name = it.track.name,
-                    artists = it.track.artists.foldIndexed("") { index: Int, acc: String, artist: Artist ->
-                        if (index != 0) "$acc && ${artist.name}" else artist.name
+                    name = it.track?.name,
+                    artists = it.track?.artists?.foldIndexed("") { index: Int, acc: String, artist: Artist ->
+                        if (artist.name != null)
+                            return@foldIndexed if (index != 0) "$acc && ${artist.name}" else artist.name
+                        else
+                            return@foldIndexed acc
                     },
-                    album = it.track.album.name
+                    album = it.track?.album?.name
                 )
             )
         }
@@ -148,4 +202,8 @@ class SpotifyService(val webClient: WebClient) {
     }
 }
 
-data class PlaylistExportResult(val inputStreamResource: InputStreamResource, val contentLength: Long)
+data class PlaylistExportResult(
+    val playlistName: String?,
+    val inputStreamResource: InputStreamResource,
+    val contentLength: Long
+)
