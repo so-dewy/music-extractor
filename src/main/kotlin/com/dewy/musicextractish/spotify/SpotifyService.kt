@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.dataformat.csv.CsvMapper
+import org.apache.poi.ss.usermodel.*
 import org.springframework.core.io.InputStreamResource
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient
 import org.springframework.security.oauth2.client.web.reactive.function.client.ServletOAuth2AuthorizedClientExchangeFilterFunction
@@ -11,6 +12,9 @@ import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import kotlin.reflect.KProperty1
+import kotlin.reflect.full.declaredMemberProperties
+
 
 const val SPOTIFY_API_BASE_URL = "https://api.spotify.com/v1"
 
@@ -120,8 +124,7 @@ class SpotifyService(val webClient: WebClient) {
         return when (exportType) {
             ExportType.JSON -> convertToJson(playlists)
             ExportType.CSV -> convertToCsv(playlists)
-            ExportType.XLS -> convertToXls(playlists)
-            ExportType.XLSX -> convertToXlsx(playlists)
+            ExportType.XLS, ExportType.XLSX -> convertToExcel(playlists, exportType)
         }
     }
 
@@ -145,12 +148,50 @@ class SpotifyService(val webClient: WebClient) {
         return results
     }
 
-    private fun convertToXlsx(playlists: List<Playlist>): List<PlaylistExportResult> {
-        TODO("Not yet implemented")
-    }
+    @Suppress("UNCHECKED_CAST")
+    private fun convertToExcel(playlists: List<Playlist>, exportType: ExportType): List<PlaylistExportResult> {
+        val results = mutableListOf<PlaylistExportResult>()
 
-    private fun convertToXls(playlists: List<Playlist>): List<PlaylistExportResult> {
-        TODO("Not yet implemented")
+        playlists.forEach { playlist ->
+            val tracks = prepareTracks(playlist)
+
+            val workbook: Workbook = WorkbookFactory.create(exportType == ExportType.XLSX)
+
+            val sheet = workbook.createSheet()
+
+            val header = sheet.createRow(0)
+
+            TrackFlattened::class.declaredMemberProperties.forEachIndexed { index, property ->
+                val headerCell = header.createCell(index)
+                headerCell.setCellValue(property.name)
+            }
+
+            var rowNum = 1
+            tracks.forEach { track ->
+                val row = sheet.createRow(rowNum)
+                TrackFlattened::class.declaredMemberProperties.forEachIndexed { index, member ->
+                    val property = track::class.members.first { member.name == it.name } as? KProperty1<Any, *>
+                    val rowCell = row.createCell(index)
+                    rowCell.setCellValue(property?.get(track).toString())
+                }
+
+                rowNum++
+            }
+
+            val byteArrayOutputStream = ByteArrayOutputStream()
+            workbook.write(byteArrayOutputStream)
+            val byteArray = byteArrayOutputStream.toByteArray()
+
+            results.add(
+                PlaylistExportResult(
+                    playlistName = playlist.name,
+                    inputStreamResource = InputStreamResource(ByteArrayInputStream(byteArray)),
+                    contentLength = byteArray.size.toLong()
+                )
+            )
+        }
+
+        return results
     }
 
     private fun convertToCsv(playlists: List<Playlist>): List<PlaylistExportResult> {

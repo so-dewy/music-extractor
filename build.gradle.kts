@@ -16,6 +16,8 @@ repositories {
 }
 
 dependencies {
+    implementation("org.apache.poi:poi-ooxml:5.0.0")
+    implementation("org.apache.poi:poi:5.0.0")
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-csv:2.12.4")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
