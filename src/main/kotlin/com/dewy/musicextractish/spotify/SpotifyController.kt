@@ -2,6 +2,7 @@ package com.dewy.musicextractish.spotify
 
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient
 import org.springframework.security.oauth2.client.annotation.RegisteredOAuth2AuthorizedClient
 import org.springframework.security.web.DefaultRedirectStrategy
@@ -52,9 +53,15 @@ class SpotifyController(val spotifyService: SpotifyService) {
     @CrossOrigin("http://localhost:3000", allowCredentials = "true")
     @GetMapping("/spotify/user/playlists")
     fun getUserPlaylists(
-        @RegisteredOAuth2AuthorizedClient("spotify") authorizedClient: OAuth2AuthorizedClient
-    ): String? {
-        return spotifyService.getUserPlaylists(authorizedClient)
+        @RegisteredOAuth2AuthorizedClient("spotify") authorizedClient: OAuth2AuthorizedClient,
+        @RequestParam offset: Int,
+        @RequestParam limit: Int,
+    ): ResponseEntity<String?> {
+        if (offset < 0 || limit < 0) throw IllegalArgumentException("Offset or limit is negative")
+
+        val playlists = spotifyService.getUserPlaylists(authorizedClient, offset, limit)
+
+        return if (playlists != null) ResponseEntity.ok(playlists) else throw IllegalStateException("Playlists not found")
     }
 
     @CrossOrigin("http://localhost:3000", allowCredentials = "true")

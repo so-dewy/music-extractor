@@ -31,8 +31,8 @@ class SpotifyService(val webClient: WebClient) {
             .block()
     }
 
-    fun getUserPlaylists(authorizedClient: OAuth2AuthorizedClient): String? {
-        val resourceUri = "${SPOTIFY_API_BASE_URL}/me/playlists"
+    fun getUserPlaylists(authorizedClient: OAuth2AuthorizedClient, offset: Int, limit: Int): String? {
+        val resourceUri = "${SPOTIFY_API_BASE_URL}/me/playlists?offset=$offset&limit=$limit"
         return webClient
             .get()
             .uri(resourceUri)
