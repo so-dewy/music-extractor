@@ -1,7 +1,6 @@
 package com.dewy.musicextractish.config
 
 import org.springframework.context.annotation.Bean
-import org.springframework.http.HttpStatus
 import org.springframework.http.codec.ClientCodecConfigurer
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
@@ -12,7 +11,6 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizedClientManager
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository
 import org.springframework.security.oauth2.client.web.reactive.function.client.ServletOAuth2AuthorizedClientExchangeFilterFunction
-import org.springframework.security.web.authentication.HttpStatusEntryPoint
 import org.springframework.web.reactive.function.client.ExchangeStrategies
 import org.springframework.web.reactive.function.client.WebClient
 
@@ -40,9 +38,9 @@ class OAuth2SecurityConfig : WebSecurityConfigurerAdapter() {
         http
             .cors()
             .and()
-            .exceptionHandling { it.authenticationEntryPoint(HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)) }
-            .oauth2Client()
-
+            .oauth2Login()
+            .defaultSuccessUrl("http://localhost:3000/yes", true)
+            .failureUrl("http://localhost:3000/no")
     }
 
     @Bean

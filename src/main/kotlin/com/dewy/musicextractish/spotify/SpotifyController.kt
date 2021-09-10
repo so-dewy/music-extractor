@@ -3,26 +3,35 @@ package com.dewy.musicextractish.spotify
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
+import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService
 import org.springframework.security.oauth2.client.annotation.RegisteredOAuth2AuthorizedClient
-import org.springframework.security.web.DefaultRedirectStrategy
 import org.springframework.util.StreamUtils
 import org.springframework.web.bind.annotation.*
+import java.time.Instant
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-import javax.servlet.http.HttpServletRequest
 import javax.servlet.http.HttpServletResponse
 
 @RestController
-class SpotifyController(val spotifyService: SpotifyService) {
-    @GetMapping("/login/oauth2/code/spotify")
-    fun redirect(
-        request: HttpServletRequest,
-        response: HttpServletResponse
-    ) {
-        DefaultRedirectStrategy().sendRedirect(request, response, "http://localhost:3000")
+class SpotifyController(
+    val spotifyService: SpotifyService,
+    val authorizedClientService: OAuth2AuthorizedClientService
+) {
+    @CrossOrigin("http://localhost:3000", allowCredentials = "true")
+    @GetMapping("/spotify/is-signed-in")
+    fun isSignedIn(): Boolean {
+        val authentication = SecurityContextHolder.getContext().authentication
+        val authorizedClient = authorizedClientService.loadAuthorizedClient<OAuth2AuthorizedClient>(
+            "spotify",
+            authentication.name
+        ) ?: return false
+
+        val accessToken = authorizedClient.accessToken
+        return accessToken.expiresAt?.isAfter(Instant.now()) ?: false
     }
 
     @CrossOrigin("http://localhost:3000", allowCredentials = "true")
