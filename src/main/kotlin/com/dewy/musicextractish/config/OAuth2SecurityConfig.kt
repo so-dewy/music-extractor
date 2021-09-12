@@ -39,8 +39,8 @@ class OAuth2SecurityConfig : WebSecurityConfigurerAdapter() {
             .cors()
             .and()
             .oauth2Login()
-            .defaultSuccessUrl("http://localhost:3000/yes", true)
-            .failureUrl("http://localhost:3000/no")
+            .defaultSuccessUrl("http://localhost:3000/auth-success", true)
+            .failureUrl("http://localhost:3000/auth-failure")
     }
 
     @Bean
